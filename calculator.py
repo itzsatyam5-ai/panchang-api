@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import swisseph as swe
-from engine.mappings import TITHIS, NAKSHATRAS, YOGAS, KARANAS
+from mappings import TITHIS, NAKSHATRAS, YOGAS, KARANAS
 
 def calculate_panchang(date_str: str, latitude: float, longitude: float):
     try:
