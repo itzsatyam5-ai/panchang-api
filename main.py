@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from engine.calculator import calculate_panchang
+from calculator import calculate_panchang
 
 app = FastAPI(title="Panchang API Engine", version="1.0")
 
