@@ -2,13 +2,16 @@ from datetime import datetime, timedelta
 import swisseph as swe
 from mappings import TITHIS, NAKSHATRAS, YOGAS, KARANAS
 
-def calculate_panchang(date_str: str, latitude: float, longitude: float):
+# Performance Optimization: एपिफेरिस पाथ और अयंश को ग्लोबल लेवल पर सेट करें 
+# ताकि हर रिक्वेस्ट पर यह बार-बार रन होकर सर्वर को धीमा न करे।
+swe.set_ephe_path('')
+swe.set_sid_mode(swe.SIDM_LAHIRI)
+
+def calculate_panchang(date_str: str, latitude: float, longitude: float, tz_offset: float = 5.5):
     try:
+        # Input Validation
         target_date = datetime.strptime(date_str, "%Y-%m-%d")
         jd = swe.julday(target_date.year, target_date.month, target_date.day, 12.0)
-        
-        swe.set_ephe_path('')
-        swe.set_sid_mode(swe.SIDM_LAHIRI)
         
         sun_pos = swe.calc_ut(jd, swe.SUN, swe.FLG_SIDEREAL)
         moon_pos = swe.calc_ut(jd, swe.MOON, swe.FLG_SIDEREAL)
@@ -22,6 +25,7 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float):
         nakshatra_no = int(moon_long / (360.0 / 27.0)) + 1
         yoga_sum = (sun_long + moon_long) % 360
         yoga_no = int(yoga_sum / (360.0 / 27.0)) + 1
+        
         karana_no = int(diff / 6.0) + 1
         if karana_no > 11:
             karana_no = ((karana_no - 1) % 7) + 1
@@ -32,10 +36,10 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float):
         
         try:
             rise_res = swe.rise_trans(jd_start, swe.SUN, geopos, 0, swe.CALC_RISE)
-            rise_hour = (rise_res[1][0] - int(rise_res[1][0])) * 24 + 5.5
+            rise_hour = (rise_res[1][0] - int(rise_res[1][0])) * 24 + tz_offset
             
             set_res = swe.rise_trans(jd_start, swe.SUN, geopos, 0, swe.CALC_SET)
-            set_hour = (set_res[1][0] - int(set_res[1][0])) * 24 + 5.5
+            set_hour = (set_res[1][0] - int(set_res[1][0])) * 24 + tz_offset
             
             sunrise_dt = target_date + timedelta(hours=rise_hour)
             sunset_dt = target_date + timedelta(hours=set_hour)
@@ -54,15 +58,15 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float):
             rahu_end = sunrise_dt + sect_duration * octet_no
             
             rahukalam_str = f"{rahu_start.strftime('%H:%M')} to {rahu_end.strftime('%H:%M')}"
-        except Exception:
-            sunrise_str = "06:10"
-            sunset_str = "18:45"
-            rahukalam_str = "15:30 to 17:00"
+            
+        except Exception as calc_err:
+            # Error Handling Improvement: अब यह नकली डेटा नहीं देगा, बल्कि असली एरर बताएगा
+            raise ValueError(f"Could not calculate sunrise/sunset for given coordinates: {str(calc_err)}")
 
         return {
             "success": True,
             "date": date_str,
-            "location": {"latitude": latitude, "longitude": longitude},
+            "location": {"latitude": latitude, "longitude": longitude, "timezone": tz_offset},
             "panchang_details": {
                 "sunrise": sunrise_str,
                 "sunset": sunset_str,
