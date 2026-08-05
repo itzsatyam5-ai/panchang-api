@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import swisseph as swe
 from mappings import TITHIS, NAKSHATRAS, YOGAS, KARANAS
 
@@ -6,9 +6,20 @@ from mappings import TITHIS, NAKSHATRAS, YOGAS, KARANAS
 swe.set_ephe_path('')
 swe.set_sid_mode(swe.SIDM_LAHIRI)
 
+def get_first_float(res):
+    """Safely extracts the first float value from any deeply nested tuple/list."""
+    if isinstance(res, float):
+        return res
+    if isinstance(res, (tuple, list)):
+        for item in res:
+            val = get_first_float(item)
+            if val is not None:
+                return val
+    return None
+
 def calculate_panchang(date_str: str, latitude: float, longitude: float, tz_offset: float = 5.5):
     try:
-        # Input Validation & Julian Day Setup
+        # Input Validation
         target_date = datetime.strptime(date_str, "%Y-%m-%d")
         jd = swe.julday(target_date.year, target_date.month, target_date.day, 12.0)
         
@@ -16,10 +27,10 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float, tz_offs
         sun_pos = swe.calc_ut(jd, swe.SUN, swe.FLG_SIDEREAL)
         moon_pos = swe.calc_ut(jd, swe.MOON, swe.FLG_SIDEREAL)
         
-        sun_long = sun_pos[0][0]
-        moon_long = moon_pos[0][0]
+        sun_long = get_first_float(sun_pos)
+        moon_long = get_first_float(moon_pos)
         
-        # पंचांग अंक गणना (Tithi, Nakshatra, Yoga, Karana)
+        # पंचांग अंक गणना
         diff = (moon_long - sun_long) % 360
         tithi_no = int(diff / 12) + 1
         nakshatra_no = int(moon_long / (360.0 / 27.0)) + 1
@@ -30,18 +41,20 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float, tz_offs
         if karana_no > 11:
             karana_no = ((karana_no - 1) % 7) + 1
 
-        # सूर्योदय और सूर्यास्त की सटीक गणना (Fixed Tuple Error)
         geopos = (longitude, latitude, 0.0)
         jd_start = swe.julday(target_date.year, target_date.month, target_date.day, 0.0)
         
         try:
-            # Correct parameter order for Python Swisseph
-            rise_res = swe.rise_trans(jd_start, swe.SUN, "", swe.FLG_SWIEPH, swe.CALC_RISE, geopos)
-            set_res = swe.rise_trans(jd_start, swe.SUN, "", swe.FLG_SWIEPH, swe.CALC_SET, geopos)
+            # Reverted to your original working arguments
+            rise_res = swe.rise_trans(jd_start, swe.SUN, geopos, 0, swe.CALC_RISE)
+            set_res = swe.rise_trans(jd_start, swe.SUN, geopos, 0, swe.CALC_SET)
             
-            # Safely extract Julian Day float value avoiding the 'tuple' error
-            rise_jd = rise_res[0][0] if isinstance(rise_res, tuple) and isinstance(rise_res[0], tuple) else (rise_res[0] if isinstance(rise_res, tuple) else rise_res)
-            set_jd = set_res[0][0] if isinstance(set_res, tuple) and isinstance(set_res[0], tuple) else (set_res[0] if isinstance(set_res, tuple) else set_res)
+            # Smart extraction to avoid 'tuple' object error
+            rise_jd = get_first_float(rise_res)
+            set_jd = get_first_float(set_res)
+            
+            if rise_jd is None or set_jd is None:
+                raise ValueError("Could not extract Time from rise_trans output.")
 
             # Convert JD to Hours properly
             rise_frac = (rise_jd + 0.5) % 1.0
@@ -50,7 +63,6 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float, tz_offs
             rise_hour = (rise_frac * 24) + tz_offset
             set_hour = (set_frac * 24) + tz_offset
             
-            # Helper function to format decimal hours into HH:MM
             def format_time(hours):
                 h = int(hours)
                 m = int((hours - h) * 60)
@@ -59,10 +71,10 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float, tz_offs
             sunrise_str = format_time(rise_hour)
             sunset_str = format_time(set_hour)
             
-            # राहुकाल गणना (Rahukalam using accurate float times)
+            # राहुकाल गणना
             day_duration = set_hour - rise_hour
             if day_duration < 0:
-                day_duration += 24 # Handle midnight crossover
+                day_duration += 24
                 
             sect_duration = day_duration / 8.0
             weekday = target_date.weekday()
@@ -75,7 +87,7 @@ def calculate_panchang(date_str: str, latitude: float, longitude: float, tz_offs
             rahukalam_str = f"{format_time(rahu_start_hr)} to {format_time(rahu_end_hr)}"
             
         except Exception as calc_err:
-            raise ValueError(f"Could not calculate sunrise/sunset for given coordinates: {str(calc_err)}")
+            raise ValueError(f"Sunrise Calc Error: {str(calc_err)}")
 
         return {
             "success": True,
