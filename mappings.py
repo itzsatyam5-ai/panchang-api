@@ -95,16 +95,19 @@ YOGAS = {
 }
 
 # करणों के नाम
+# (आपका TITHIS, NAKSHATRAS, और YOGAS का पुराना कोड यहाँ रहेगा...)
+
+# करणों के नाम (अपडेटेड)
 KARANAS = {
-  1: "Bava",
-  2: "Balava",
-  3: "Kaulava",
-  4: "Taitila",
-  5: "Gara",
-  6: "Vanija",
-  7: "Vishti",
-  8: "Bavani",
-  9: "Balava",
-  10: "Kaulava",
-  11: "Shakuni",
+    1: "Bava",
+    2: "Balava",
+    3: "Kaulava",
+    4: "Taitila",
+    5: "Gara",
+    6: "Vanija",
+    7: "Vishti",
+    8: "Kimstughna",  # सही किया गया
+    9: "Shakuni",     # सही किया गया
+    10: "Chatushpada",# सही किया गया
+    11: "Naga",       # सही किया गया
 }
