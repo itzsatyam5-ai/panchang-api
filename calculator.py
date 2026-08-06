@@ -1,20 +1,20 @@
 import swisseph as swe
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import pytz
 from typing import Dict, Any
 
-# Lahiri Ayanamsa Set
+# Lahiri Ayanamsa Set for Accurate Vedic Panchang
 swe.set_sid_mode(swe.SIDM_LAHIRI)
 
-# Hindi Mappings for Choghadiya
+# Hindi Mappings & Hindi Natures for Choghadiya
 CHOGHADIYA_TYPES = {
-    "Shubh": {"hi": "शुभ", "nature": "Good"},
-    "Labh": {"hi": "लाभ", "nature": "Good"},
-    "Amrit": {"hi": "अमृत", "nature": "Good"},
-    "Char": {"hi": "चर", "nature": "Neutral"},
-    "Roga": {"hi": "रोग", "nature": "Bad"},
-    "Kala": {"hi": "काल", "nature": "Bad"},
-    "Udveg": {"hi": "उद्वेग", "nature": "Bad"}
+    "Shubh": {"hi": "शुभ", "nature": "शुभ"},
+    "Labh": {"hi": "लाभ", "nature": "शुभ"},
+    "Amrit": {"hi": "अमृत", "nature": "शुभ"},
+    "Char": {"hi": "चर", "nature": "सामान्य"},
+    "Roga": {"hi": "रोग", "nature": "अशुभ"},
+    "Kala": {"hi": "काल", "nature": "अशुभ"},
+    "Udveg": {"hi": "उद्वेग", "nature": "अशुभ"}
 }
 
 # Weekday-wise Day Choghadiya Order (0=Monday, 6=Sunday)
@@ -60,17 +60,21 @@ class PanchangCalculatorService:
         utc_dt = datetime(year, month, day, hours, minutes, seconds, tzinfo=pytz.utc)
         return utc_dt.astimezone(self.tz)
 
-    def get_sun_rise_set(self, date_obj: datetime.date) -> Dict[str, datetime]:
-        """Calculates exact Sunrise and Sunset for given date."""
-        jd_noon = self._julian_day(datetime(date_obj.year, date_obj.month, date_obj.day, 12, 0, tzinfo=self.tz))
+    def get_sun_rise_set(self, date_obj: date) -> Dict[str, datetime]:
+        """
+        Fix: Search from LOCAL MIDNIGHT (00:00:00) so that today's sunrise 
+        and today's sunset are returned properly without date crossing bugs.
+        """
+        local_midnight = self.tz.localize(datetime(date_obj.year, date_obj.month, date_obj.day, 0, 0, 0))
+        jd_midnight = self._julian_day(local_midnight)
         geopos = (self.lon, self.lat, 0.0)
 
-        # Sunrise
-        res_rise = swe.rise_trans(jd_noon, swe.SUN, swe.CALC_RISE | swe.BIT_DISC_CENTER, geopos)
+        # Standard Sunrise (Upper limb visible with atmospheric refraction)
+        res_rise = swe.rise_trans(jd_midnight, swe.SUN, swe.CALC_RISE, geopos)
         sunrise_jd = res_rise[1][0]
 
-        # Sunset
-        res_set = swe.rise_trans(jd_noon, swe.SUN, swe.CALC_SET | swe.BIT_DISC_CENTER, geopos)
+        # Standard Sunset
+        res_set = swe.rise_trans(jd_midnight, swe.SUN, swe.CALC_SET, geopos)
         sunset_jd = res_set[1][0]
 
         return {
@@ -78,31 +82,32 @@ class PanchangCalculatorService:
             "sunset": self._jd_to_datetime(sunset_jd)
         }
 
-    def get_next_sunrise(self, date_obj: datetime.date) -> datetime:
+    def get_next_sunrise(self, date_obj: date) -> datetime:
         next_date = date_obj + timedelta(days=1)
         return self.get_sun_rise_set(next_date)["sunrise"]
 
-    def get_moon_rise_set(self, date_obj: datetime.date) -> Dict[str, Any]:
-        """Calculates Moonrise and Moonset."""
-        jd_noon = self._julian_day(datetime(date_obj.year, date_obj.month, date_obj.day, 12, 0, tzinfo=self.tz))
+    def get_moon_rise_set(self, date_obj: date) -> Dict[str, Any]:
+        """Calculates Moonrise and Moonset for given date."""
+        local_midnight = self.tz.localize(datetime(date_obj.year, date_obj.month, date_obj.day, 0, 0, 0))
+        jd_midnight = self._julian_day(local_midnight)
         geopos = (self.lon, self.lat, 0.0)
 
         try:
-            res_rise = swe.rise_trans(jd_noon, swe.MOON, swe.CALC_RISE, geopos)
+            res_rise = swe.rise_trans(jd_midnight, swe.MOON, swe.CALC_RISE, geopos)
             moonrise = self._jd_to_datetime(res_rise[1][0]).strftime("%I:%M %p")
         except Exception:
-            moonrise = "No Moonrise today"
+            moonrise = "चंद्रोदय नहीं"
 
         try:
-            res_set = swe.rise_trans(jd_noon, swe.MOON, swe.CALC_SET, geopos)
+            res_set = swe.rise_trans(jd_midnight, swe.MOON, swe.CALC_SET, geopos)
             moonset = self._jd_to_datetime(res_set[1][0]).strftime("%I:%M %p")
         except Exception:
-            moonset = "No Moonset today"
+            moonset = "चंद्रास्त नहीं"
 
         return {"moonrise": moonrise, "moonset": moonset}
 
     def calculate_special_kaals(self, sunrise: datetime, sunset: datetime, weekday: int) -> Dict[str, str]:
-        """Calculates Rahu Kaal, Yamaganda, Gulika, Abhijit & Brahma Muhurat."""
+        """Calculates Rahu Kaal, Yamaganda, Gulika, Abhijit & Brahma Muhurat safely."""
         day_duration = (sunset - sunrise).total_seconds()
         part_8 = day_duration / 8.0
 
@@ -116,7 +121,7 @@ class PanchangCalculatorService:
             end = sunrise + timedelta(seconds=part_idx * part_8)
             return f"{start.strftime('%I:%M %p')} - {end.strftime('%I:%M %p')}"
 
-        # Abhijit Muhurat (8th Muhurat out of 15 parts)
+        # Abhijit Muhurat (8th Muhurat out of 15 parts of daytime)
         part_15 = day_duration / 15.0
         abhijit_start = sunrise + timedelta(seconds=7 * part_15)
         abhijit_end = sunrise + timedelta(seconds=8 * part_15)
@@ -134,7 +139,7 @@ class PanchangCalculatorService:
         }
 
     def calculate_choghadiya(self, sunrise: datetime, sunset: datetime, next_sunrise: datetime, weekday: int) -> Dict[str, list]:
-        """Calculates Day and Night Choghadiya intervals."""
+        """Calculates Day and Night Choghadiya intervals with Hindi translation."""
         day_part = (sunset - sunrise).total_seconds() / 8.0
         night_part = (next_sunrise - sunset).total_seconds() / 8.0
 
