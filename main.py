@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, date
 from calculator import PanchangCalculatorService
 
-app = FastAPI(title="MithilaWorld Panchang API", version="1.0.0")
+app = FastAPI(title="MithilaWorld Panchang API", version="1.0.1")
 
 # Enable CORS for WordPress access
 app.add_middleware(
@@ -20,18 +20,20 @@ def read_root():
 
 @app.get("/api/v1/panchang")
 def get_panchang(
-    lat: float = Query(26.1522, description="Latitude"),
-    lon: float = Query(85.8971, description="Longitude"),
-    date_str: str = Query(None, alias="date", description="Date in YYYY-MM-DD format")
+    lat: float = Query(26.1542, description="Latitude (Default: Darbhanga)"),
+    lon: float = Query(85.8918, description="Longitude (Default: Darbhanga)"),
+    date_str: str = Query(None, alias="date", description="Date in YYYY-MM-DD or DD-MM-YYYY format")
 ):
-    # Parse date
+    target_date = date.today()
+    
+    # Flexible Date Parsing (Handles both YYYY-MM-DD and DD-MM-YYYY)
     if date_str:
-        try:
-            target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            target_date = date.today()
-    else:
-        target_date = date.today()
+        for fmt in ("%Y-%m-%d", "%d-%m-%Y"):
+            try:
+                target_date = datetime.strptime(date_str.strip(), fmt).date()
+                break
+            except ValueError:
+                continue
 
     calc = PanchangCalculatorService(lat=lat, lon=lon)
     
@@ -52,10 +54,10 @@ def get_panchang(
             "longitude": lon
         },
         "sun_moon": {
-            "sunrise": sun_data["sunrise"].strftime("%I:%M %p"),
-            "sunset": sun_data["sunset"].strftime("%I:%M %p"),
-            "moonrise": moon_data["moonrise"],
-            "moonset": moon_data["moonset"]
+            "sunrise": sun_data["sunrise"].strftime("%I:%M %p") if isinstance(sun_data["sunrise"], datetime) else str(sun_data["sunrise"]),
+            "sunset": sun_data["sunset"].strftime("%I:%M %p") if isinstance(sun_data["sunset"], datetime) else str(sun_data["sunset"]),
+            "moonrise": moon_data.get("moonrise", "N/A"),
+            "moonset": moon_data.get("moonset", "N/A")
         },
         "muhurat_and_kaal": special_kaals,
         "choghadiya": choghadiya_data
