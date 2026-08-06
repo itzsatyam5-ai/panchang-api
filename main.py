@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime, date
-from engine.calculator import PanchangCalculatorService
+from calculator import PanchangCalculatorService
 
 app = FastAPI(title="MithilaWorld Panchang API", version="1.0.0")
 
