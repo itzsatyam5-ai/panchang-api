@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 import json
 import os
 from datetime import datetime
-from app.calculator import calculate_full_panchang
+from calculator import calculate_full_panchang  # Fixed path
 
 app = FastAPI(
     title="MithilaWorld Panchang API Engine",
@@ -53,7 +53,6 @@ def get_panchang(
     lon: float = Query(85.8918, description="Longitude")
 ):
     try:
-        # Normalize date format
         if "-" in date:
             parts = date.split("-")
             if len(parts[0]) == 4:
